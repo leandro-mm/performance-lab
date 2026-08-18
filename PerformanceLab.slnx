@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="PerformanceLab.Benchmarks/PerformanceLab.Benchmarks.csproj" />
+  <Project Path="PerformanceLab.Core/PerformanceLab.Core.csproj" />
+  <Project Path="PerformanceLab.Web/PerformanceLab.Web.csproj" />
+</Solution>
