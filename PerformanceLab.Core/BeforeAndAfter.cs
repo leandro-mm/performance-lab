@@ -1,10 +1,10 @@
-﻿namespace PerformanceLab.Core;
+﻿using System.Text;
 
-public class MemoryLeakSimulator
+namespace PerformanceLab.Core;
+
+public class BeforeAndAfter
 {
     #region Métodos com Baixa Performance
-
-
 
     // Retornar uma string
     public string ProcessLargeString_Bad(int iterations)
@@ -35,15 +35,7 @@ public class MemoryLeakSimulator
         return (int)sum / numbers.Length;
     }
 
-    // simula vazamento de memória (para testar)
-    private static List<byte[]> _memoryHog = new();
-    public void SimulateMemoryLeak(int sizeInMB)
-    {
-        var data = new byte[sizeInMB * 1024 * 1024];
-        _memoryHog.Add(data); // Mantém referência, impedindo GC
-    }
 
-    
     #endregion
 
     #region Métodos com Melhor Performance
@@ -65,7 +57,7 @@ public class MemoryLeakSimulator
         }
 
         return sb.ToString();
-    }    
+    }
 
     public decimal CalculateAverage_Good(int[] numbers)
     {
@@ -77,6 +69,6 @@ public class MemoryLeakSimulator
         return sum / numbers.Length;
     }
 
-    
+
     #endregion
 }
