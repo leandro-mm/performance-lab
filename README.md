@@ -1,10 +1,10 @@
 # Dashboard de Performance com .NET
 
 ## Contexto
-Analisar e comparar o impacto de diferentes abordagens de codificação no desempenho de aplicações é uma tarefa extremanemte importante em engenharia de software. Para tanto, foi desenvolvido um projeto utilizando DotNet8 com um ambiente controlado para:
+Projeto idealizado para analisar e comparar o impacto de diferentes abordagens de codificação no desempenho de aplicações. 
 - Visualizar métricas de performance em tempo real através de um dashboard interativo;
 - Comparar métodos otimizados vs não otimizados com resultados mensuráveis;
-- Coletar e analisar dados de GC (Garbage Collector) e uso de memória;
+- Coletar e analisar dados de Garbage Collector (GC) e uso de memória;
 ---  
 ## Objetivo do Projeto 
 ### 1. Dashboard em Tempo Real
