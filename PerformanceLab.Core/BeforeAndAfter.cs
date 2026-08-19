@@ -1,10 +1,9 @@
 ﻿using System.Text;
 
-namespace PerformanceLab.Core;
-
 public class BeforeAndAfter
 {
     #region Métodos com Baixa Performance
+
 
     // Retornar uma string
     public string ProcessLargeString_Bad(int iterations)
@@ -34,7 +33,6 @@ public class BeforeAndAfter
         }
         return (int)sum / numbers.Length;
     }
-
 
     #endregion
 
