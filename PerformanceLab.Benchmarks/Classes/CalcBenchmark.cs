@@ -1,4 +1,5 @@
 using BenchmarkDotNet.Attributes;
+using PerformanceLab.Core;
 namespace PerformanceLab.Benchmark.Classes;
 
 [MemoryDiagnoser]

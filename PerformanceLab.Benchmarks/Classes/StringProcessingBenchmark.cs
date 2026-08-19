@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
+using PerformanceLab.Core;
 
 namespace PerformanceLab.Benchmark.Classes;
 
