@@ -1,0 +1,116 @@
+@page "/DashboardMetrics"
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject HttpClient Http
+@using PerformanceLab.Web.Hubs
+@using Microsoft.AspNetCore.SignalR.Client
+@using System.Collections.Generic
+@using System.Threading.Tasks
+
+
+<div class="container-fluid mt-4">
+    <div class="row mt-4">
+        <!-- Métricas em Cards -->
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-header">CPU</div>
+                <div class="card-body">
+                    <h3>@_currentMetrics?.CpuUsagePercent %</h3>
+                    <small>Workload: @_currentMetrics?.ThreadCount threads</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-header">Memória RAM (Managed)</div>
+                <div class="card-body">
+                    <h3>@_currentMetrics?.ManagedMemoryMB MB</h3>
+                    <small>Total: @_currentMetrics?.MemoryUsedMB MB</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-header">GC Mode</div>
+                <div class="card-body">
+                    <h5>@_currentMetrics?.GcMode</h5>
+                    <small>Latency: @_currentMetrics?.GcLatencyMode</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card text-white bg-danger">
+                <div class="card-header">GC Collections</div>
+                <div class="card-body">
+                    <h6>Gen0: @_currentMetrics?.Gen0Collections</h6>
+                    <h6>Gen1: @_currentMetrics?.Gen1Collections</h6>
+                    <h6>Gen2: @_currentMetrics?.Gen2Collections</h6>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+    <!-- Gráfico (Chart.js) -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">Histórico de Memória (últimos 100 ticks)</div>
+                <div class="card-body">
+                    <canvas id="memoryChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botão para disparar Benchmark -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <button class="btn btn-primary btn-lg" @onclick="RunBenchmark">
+                🚀 Executar Benchmark (comparação Antes/Depois)
+            </button>
+            <button class="btn btn-danger btn-lg ms-2" @onclick="SimulateMemoryLeak">
+                💣 Simular Memory Leak (5MB)
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+
+    private PerformanceMetrics? _currentMetrics;
+    private List<PerformanceMetrics> _history = new();
+    protected override async Task OnInitializedAsync()
+    {
+        // Setup SignalR
+        var connection = new HubConnectionBuilder()
+                        .WithUrl(Navigation.ToAbsoluteUri("/metricsHub"))
+                        .Build();
+
+        connection.On<PerformanceMetrics>("ReceiveMetrics", metrics =>
+                {
+                    _currentMetrics = metrics;
+                    StateHasChanged();
+                });
+
+        connection.On<List<PerformanceMetrics>>("ReceiveHistory", history =>
+                {
+                    _history = history;
+                    StateHasChanged();
+                });
+
+        await connection.StartAsync();
+    }
+    private async Task RunBenchmark()
+    {
+        // Chamar API que executa Benchmark.NET
+        await Http.PostAsync("/api/benchmark/run", null);
+    }
+
+    private async Task SimulateMemoryLeak()
+    {
+        await Http.PostAsync("/api/metrics/simulate-leak?mb=5", null);
+    }
+}

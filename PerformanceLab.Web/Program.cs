@@ -1,10 +1,25 @@
 using PerformanceLab.Web.Components;
+using PerformanceLab.Web.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+/// ✅ CONFIGURAÇÃO DO GC 
+var gcOptions = builder.Configuration.ConfigureGC(builder.Services);
+
+var logger = LoggerFactory.Create(cfg => cfg.AddConsole()).CreateLogger("Program");
+GCConfiguration.LogGCConfiguration(logger, gcOptions);
+
+// Serviços
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddSignalR();
+builder.Services.AddHostedService<MetricsCollector>();
+
+builder.Services.AddControllers();
+
+// HttpClient para o Dashboard
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
@@ -17,12 +32,21 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseStaticFiles();
+app.UseRouting();
 
 app.UseAntiforgery();
 
-app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapBlazorHub();
+app.MapHub<MetricsHub>("/metricsHub");
+app.MapControllers(); // Para API dos benchmarks
+
+
+
+
+
 
 app.Run();

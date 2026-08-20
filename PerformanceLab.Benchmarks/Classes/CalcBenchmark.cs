@@ -15,6 +15,7 @@ public class CalcBenchmark
         var rand = new Random(42);
         _numbers = Enumerable.Range(1, 1000000).Select(_ => rand.Next(1000)).ToArray();
     }
+
     [Benchmark(Baseline = true)]
     public decimal CalculateAverage_Bad() =>
         _beforeAndAfter.CalculateAverage_Bad(_numbers);
