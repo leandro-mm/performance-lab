@@ -3,6 +3,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 @inject IHttpClientFactory HttpClientFactory
+@inject SweetAlertService Swal
 @using PerformanceLab.Web.Hubs
 @using Microsoft.AspNetCore.SignalR.Client
 @using System.Collections.Generic
@@ -18,38 +19,38 @@
         </div>
     </div>
     <div class="row mt-4">
-        <!-- Métricas em Cards -->
         <div class="col-md-3">
-            <div class="card text-white bg-primary">
-                <div class="card-header">CPU</div>
-                <div class="card-body">
-                    <h3>@_currentMetrics?.CpuUsagePercent %</h3>
-                    <small>Workload: @_currentMetrics?.ThreadCount threads</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-success">
-                <div class="card-header">Memória RAM (Managed)</div>
-                <div class="card-body">
-                    <h3>@_currentMetrics?.ManagedMemoryMB MB</h3>
-                    <small>Total: @_currentMetrics?.MemoryUsedMB MB</small>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-3">
-            <div class="card text-white bg-warning">
+            <div class="card bg-light">
                 <div class="card-header">GC Mode</div>
                 <div class="card-body">
                     <h5>@_currentMetrics?.GcMode</h5>
-                    <small>Latency: @_currentMetrics?.GcLatencyMode</small>
+                    <h5>Latency: @_currentMetrics?.GcLatencyMode</h5>
                 </div>
             </div>
         </div>
 
         <div class="col-md-3">
-            <div class="card text-white bg-danger">
+            <div class="card bg-light">
+                <div class="card-header">CPU</div>
+                <div class="card-body">
+                    <h3>@_currentMetrics?.CpuUsagePercent %</h3>
+                    <h5>Workload: @_currentMetrics?.ThreadCount threads</h5>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-header">Memória RAM (Managed)</div>
+                <div class="card-body">
+                    <h3>@_currentMetrics?.MemoryUsedMB/@_currentMetrics?.ManagedMemoryMB MB</h3>
+                </div>
+            </div>
+        </div>
+
+        
+
+        <div class="col-md-3">
+            <div class="card bg-light">
                 <div class="card-header">GC Collections</div>
                 <div class="card-body">
                     <h6>Gen0: @_currentMetrics?.Gen0Collections</h6>
@@ -75,15 +76,46 @@
 
     <!-- Botão para disparar Benchmark -->
     <div class="row mt-4">
-        <div class="col-12">
-            <button class="btn btn-primary btn-lg" @onclick="RunBenchmark">
-                🚀 Executar Benchmark (comparação Antes/Depois)
-            </button>
-            <button class="btn btn-danger btn-lg ms-2" @onclick="SimulateMemoryLeak">
-                💣 Simular Memory Leak (5MB)
-            </button>
+        <div class="col-4">
+            <div class="p-3 bg-light border border-secondary rounded" style="background-color: #f8f9fa !important;">
+                <div class="text-center text-secondary fw-bold mb-2"
+                     style="font-size: 0.9rem; color: #6c757d !important;">
+                    Executar Benchmark (antes/depois)
+                </div>
+                <button class="btn btn-primary btn-md w-100" @onclick="RunBenchmark">
+                    OK
+                </button>
+            </div>
+
+        </div>
+        <div class="col-4">
+            <div class="p-3 bg-light border border-secondary rounded" style="background-color: #f8f9fa !important;">
+                <div class="text-center text-secondary fw-bold mb-2"
+                     style="font-size: 0.9rem; color: #6c757d !important;">
+                    Simular Memory Leak (5MB)
+                </div>
+                <button class="btn btn-primary btn-md w-100" @onclick="SimulateMemoryLeak">
+                    OK
+                </button>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="p-3 bg-light border border-secondary rounded" style="background-color: #f8f9fa !important;">
+                <div class="text-center text-secondary fw-bold mb-2"
+                     style="font-size: 0.9rem; color: #6c757d !important;">
+                    Limpar Memory Leak (5MB)
+                </div>
+                <button class="btn btn-primary btn-md w-100 text-white" @onclick="CleanMemoryLeak"
+                        disabled="@_isCleanButtonDisabled">
+                    OK
+                </button>
+
+            </div>
         </div>
     </div>
+
+    
+    
 </div>
 
 @code {
@@ -93,6 +125,8 @@
     private HubConnection? _hubConnection;
     private bool _isConnected = false;
     private string _statusMessage = "Aguardando conexão...";
+    HttpClient? httpClient = null;
+    private bool _isCleanButtonDisabled = true; // Add this line
 
     protected override async Task OnInitializedAsync()
     {
@@ -179,7 +213,7 @@
         {
             Console.WriteLine("📡 Enviando requisição para /api/benchmark/run");
 
-            var httpClient = HttpClientFactory.CreateClient("API");
+            httpClient = HttpClientFactory.CreateClient("API");
 
             // Chamar API que executa Benchmark.NET
             var response = await httpClient.PostAsync("/api/benchmark/run", null);
@@ -191,26 +225,56 @@
                 var content = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"✅ Benchmark executado com sucesso: {content}");
 
-                // Mostrar mensagem para o usuário
-                _statusMessage = "✅ Benchmark executado!";
+                var result = Swal.FireAsync(new SweetAlertOptions
+                {
+                    Title = "",
+                    Text = "Benchmark executado com sucesso",
+                    Icon = SweetAlertIcon.Info,
+                    ShowCancelButton = false,
+                    ConfirmButtonText = "Ok"
+                });
                 StateHasChanged();
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"❌ Benchmark falhou: {error}");
-                _statusMessage = $"❌ Erro: {response.StatusCode}";
+
+                await JSRuntime.InvokeVoidAsync("Swal.fire", new
+                {
+                    title = "Erro",
+                    text = response.StatusCode,
+                    icon = "error"
+                });
+
+                var result = Swal.FireAsync(new SweetAlertOptions
+                {
+                    Title = "Erro",
+                    Text = error,
+                    Icon = SweetAlertIcon.Info,
+                    ShowCancelButton = false,
+                    ConfirmButtonText = "Ok"
+                });
                 StateHasChanged();
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Erro no benchmark: {ex.Message}");
-            _statusMessage = $"❌ Erro: {ex.Message}";
+
+        
+            var result = Swal.FireAsync(new SweetAlertOptions
+            {
+                Title = "Erro",
+                Text = ex.Message,
+                Icon = SweetAlertIcon.Info,
+                ShowCancelButton = false,
+                ConfirmButtonText = "Ok"
+            });
             StateHasChanged();
         }
 
-        
+
     }
 
     private async Task SimulateMemoryLeak()
@@ -221,14 +285,25 @@
         {
             Console.WriteLine("📡 Enviando requisição para /api/metrics/simulate-leak?mb=5");
 
-            var httpClient = HttpClientFactory.CreateClient("API");
-
+            httpClient = HttpClientFactory.CreateClient("API");
             var response = await httpClient.PostAsync("/api/metrics/simulate-leak?mb=5", null);
 
             if (response.IsSuccessStatusCode)
             {
                 Console.WriteLine("✅ Memory leak simulado");
-                _statusMessage = "💣 Memory leak de 5MB simulado!";
+
+                var message = await response.Content.ReadAsStringAsync();
+
+                
+                var result = Swal.FireAsync(new SweetAlertOptions
+                {
+                    Title = "",
+                    Text = message,
+                    Icon = SweetAlertIcon.Info,
+                    ShowCancelButton = false,
+                    ConfirmButtonText = "Ok"
+                });
+                _isCleanButtonDisabled = false;
                 StateHasChanged();
             }
             else
@@ -239,20 +314,49 @@
                     // If no content, use status code and reason
                     error = $"Status Code: {(int)response.StatusCode} - {response.ReasonPhrase}";
                     Console.WriteLine($"⚠️ No error content returned: {error}");
+
+          
+
+                    var result2 = Swal.FireAsync(new SweetAlertOptions
+                    {
+                        Title = "Erro",
+                        Text = error,
+                        Icon = SweetAlertIcon.Info,
+                        ShowCancelButton = false,
+                        ConfirmButtonText = "Ok"
+                    });
                 }
                 else
                 {
                     Console.WriteLine($"❌ Memory leak falhou: {error}");
                 }
 
-                _statusMessage = $"❌ Erro: {error}";
+               
+
+                var result = Swal.FireAsync(new SweetAlertOptions
+                {
+                    Title = "Erro",
+                    Text = error,
+                    Icon = SweetAlertIcon.Info,
+                    ShowCancelButton = false,
+                    ConfirmButtonText = "Ok"
+                });
                 StateHasChanged();
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Erro ao simular memory leak: {ex.Message}");
-            _statusMessage = $"❌ Erro: {ex.Message}";
+
+    
+            var result = Swal.FireAsync(new SweetAlertOptions
+            {
+                Title = "Erro",
+                Text = ex.Message,
+                Icon = SweetAlertIcon.Info,
+                ShowCancelButton = false,
+                ConfirmButtonText = "Ok"
+            });
             StateHasChanged();
         }
 
@@ -261,9 +365,27 @@
     // iberar recursos quando o componente for descartado
     public async ValueTask DisposeAsync()
     {
+
         if (_hubConnection is not null)
         {
             await _hubConnection.DisposeAsync();
         }
+    }
+
+    private async Task CleanMemoryLeak()
+    {
+        httpClient = HttpClientFactory.CreateClient("API");
+        await httpClient.PostAsync("/api/metrics/clear-leak", null);
+
+        var result = Swal.FireAsync(new SweetAlertOptions
+        {
+            Title = "",
+            Text = "Memory Leak Stopped!",
+            Icon = SweetAlertIcon.Info,
+            ShowCancelButton = false,
+            ConfirmButtonText = "Ok"
+        });
+        _isCleanButtonDisabled = true;
+        StateHasChanged();
     }
 }
