@@ -1,5 +1,4 @@
 using System.Runtime;
-
 public static class GCConfiguration
 {
     private const string CONFIG_SECTION = "RuntimeOptions:GCSettings";

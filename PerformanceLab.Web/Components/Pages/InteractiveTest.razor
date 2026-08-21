@@ -1,0 +1,19 @@
+@page "/interactive-test"
+@rendermode InteractiveServer
+<h3>Teste Interativo</h3>
+
+<p>Contagem: @_count</p>
+<button class="btn btn-primary" @onclick="IncrementCount">Incrementar</button>
+<p>Última atualização: @DateTime.Now.ToString("HH:mm:ss.fff")</p>
+
+@code {
+    private int _count = 0;
+    private DateTime _lastUpdate = DateTime.Now;
+
+    private void IncrementCount()
+    {
+        _count++;
+        _lastUpdate = DateTime.Now;
+        Console.WriteLine($"🔵 Contagem: {_count}");
+    }
+}
