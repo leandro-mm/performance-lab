@@ -1,0 +1,48 @@
+@using PerformanceLab.Web.Models
+@if (Result != null)
+{
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <span>📊 Resultados do Benchmark</span>
+            <button class="btn btn-sm btn-light" @onclick="CloseHandler">✕</button>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <strong>Recomendação:</strong> @Result.Recommendations.Tip
+                <br />
+                <strong>GC Gen0 Collections:</strong> @Result.Recommendations.Gen0Collections
+            </div>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Método</th>
+                        <th>Média (ms)</th>
+                        <th>Desvio</th>
+                        <th>Memória</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var report in Result.Reports)
+                    {
+                        <tr>
+                            <td>@report.DisplayInfo</td>
+                            <td>@(report.Mean?.ToString("F4") ?? "-")</td>
+                            <td>@(report.StandardDeviation?.ToString("F4") ?? "-")</td>
+                            <td>@(report.AllocatedMemory?.ToString() ?? "-")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public BenchmarkResultDto? Result { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private async Task CloseHandler()
+    {
+        await OnClose.InvokeAsync();
+    }
+}

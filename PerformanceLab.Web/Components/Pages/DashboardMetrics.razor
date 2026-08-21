@@ -4,10 +4,7 @@
 @inject IJSRuntime JSRuntime
 @inject IHttpClientFactory HttpClientFactory
 @inject SweetAlertService Swal
-@using PerformanceLab.Web.Hubs
-@using Microsoft.AspNetCore.SignalR.Client
-@using System.Collections.Generic
-@using System.Threading.Tasks
+
 
 
 <div class="container-fluid mt-4">
@@ -62,6 +59,11 @@
 
 
     </div>
+
+   
+
+    
+
     <!-- Gráfico (Chart.js) -->
     <div class="row mt-4">
         <div class="col-12">
@@ -74,7 +76,8 @@
         </div>
     </div>
 
-    <!-- Botão para disparar Benchmark -->
+    
+    <!-- Botões -->
     <div class="row mt-4">
         <div class="col-4">
             <div class="p-3 bg-light border border-secondary rounded" style="background-color: #f8f9fa !important;">
@@ -113,9 +116,12 @@
             </div>
         </div>
     </div>
+    @if (_benchmarkResult != null)
+    {
+        <BenchmarkResults Result="@_benchmarkResult" OnClose="() => { _benchmarkResult = null; }" />
+    }
 
-    
-    
+   
 </div>
 
 @code {
@@ -127,6 +133,9 @@
     private string _statusMessage = "Aguardando conexão...";
     HttpClient? httpClient = null;
     private bool _isCleanButtonDisabled = true; // Add this line
+    private bool _chartInitialized = false;
+    private DotNetObjectReference<DashboardMetrics>? _objRef;
+    private BenchmarkResultDto? _benchmarkResult;
 
     protected override async Task OnInitializedAsync()
     {
@@ -174,8 +183,9 @@
                                 {
                                     _history.RemoveAt(0);
                                 }
-
+                                _ = UpdateChartAsync();
                                 StateHasChanged();
+
                                 Console.WriteLine($"📊 Métricas recebidas: CPU={metrics.CpuUsagePercent}%, Memória={metrics.MemoryUsedMB}MB");
                             });
                         });
@@ -185,6 +195,7 @@
                     InvokeAsync(() =>
                     {
                         _history = history;
+                        _ = UpdateChartAsync();
                         StateHasChanged();
                     });
                 });
@@ -201,39 +212,66 @@
         {
             _statusMessage = $"❌ Erro: {ex.Message}";
             StateHasChanged();
-            Console.WriteLine($"❌ Erro ao conectar ao SignalR: {ex.Message}");
         }
 
     }
-    private async Task RunBenchmark()
+    [JSInvokable]
+    private async Task UpdateChartAsync()
     {
-        Console.WriteLine("🔵 RunBenchmark iniciado");
+        if (!_chartInitialized || _history.Count == 0) return;
 
         try
         {
-            Console.WriteLine("📡 Enviando requisição para /api/benchmark/run");
+            var labels = _history.Select((_, i) => i.ToString()).ToArray();
+            var memoryData = _history.Select(m => (double)m.MemoryUsedMB).ToArray();
+            var cpuData = _history.Select(m => (double)m.CpuUsagePercent).ToArray();
 
+            await JSRuntime.InvokeVoidAsync("updateMemoryChart", labels, memoryData, cpuData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error updating chart: {ex.Message}");
+            var result = Swal.FireAsync(new SweetAlertOptions
+            {
+                Title = "Erro",
+                Text = ex.Message,
+                Icon = SweetAlertIcon.Info,
+                ShowCancelButton = false,
+                ConfirmButtonText = "Ok"
+            });
+        }
+    }
+
+    private async Task RunBenchmark()
+    {
+        try
+        {
             httpClient = HttpClientFactory.CreateClient("API");
 
             // Chamar API que executa Benchmark.NET
             var response = await httpClient.PostAsync("/api/benchmark/run", null);
 
-            Console.WriteLine($"📡 Resposta: {(int)response.StatusCode} - {response.StatusCode}");
-
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"✅ Benchmark executado com sucesso: {content}");
 
-                var result = Swal.FireAsync(new SweetAlertOptions
+                _benchmarkResult = JsonSerializer.Deserialize<BenchmarkResultDto>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                
+                StateHasChanged();
+                @*
+                _ = Swal.FireAsync(new SweetAlertOptions
                 {
                     Title = "",
                     Text = "Benchmark executado com sucesso",
                     Icon = SweetAlertIcon.Info,
                     ShowCancelButton = false,
                     ConfirmButtonText = "Ok"
-                });
-                StateHasChanged();
+                }); *@
+                
             }
             else
             {
@@ -262,7 +300,6 @@
         {
             Console.WriteLine($"❌ Erro no benchmark: {ex.Message}");
 
-        
             var result = Swal.FireAsync(new SweetAlertOptions
             {
                 Title = "Erro",
@@ -273,8 +310,6 @@
             });
             StateHasChanged();
         }
-
-
     }
 
     private async Task SimulateMemoryLeak()
@@ -283,10 +318,10 @@
 
         try
         {
-            Console.WriteLine("📡 Enviando requisição para /api/metrics/simulate-leak?mb=5");
+            Console.WriteLine("📡 Enviando requisição para /api/memory-leak/simulate-leak?mb=5");
 
             httpClient = HttpClientFactory.CreateClient("API");
-            var response = await httpClient.PostAsync("/api/metrics/simulate-leak?mb=5", null);
+            var response = await httpClient.PostAsync("/api/memory-leak/simulate-leak?mb=5", null);
 
             if (response.IsSuccessStatusCode)
             {
@@ -375,7 +410,7 @@
     private async Task CleanMemoryLeak()
     {
         httpClient = HttpClientFactory.CreateClient("API");
-        await httpClient.PostAsync("/api/metrics/clear-leak", null);
+        await httpClient.PostAsync("/api/memory-leak/clear-leak", null);
 
         var result = Swal.FireAsync(new SweetAlertOptions
         {
@@ -388,4 +423,34 @@
         _isCleanButtonDisabled = true;
         StateHasChanged();
     }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeChartAsync();
+        }
+    }
+    private async Task InitializeChartAsync()
+    {
+        try
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("initializeMemoryChart", _objRef);
+            _chartInitialized = true;
+
+            // Se já houver dados no histórico, atualiza o gráfico
+            if (_history.Count > 0)
+            {
+                await UpdateChartAsync();
+            }
+
+            Console.WriteLine("✅ Gráfico inicializado com sucesso");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao inicializar gráfico: {ex.Message}");
+        }
+    }
+
 }

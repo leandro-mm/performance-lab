@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Order;
 
-namespace PerformanceLab.Benchmark.Classes;
+namespace PerformanceLab.Benchmarks.Classes;
 
 [MemoryDiagnoser] // Mede alocações de memória
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
