@@ -1,5 +1,5 @@
 using BenchmarkDotNet.Attributes;
-namespace PerformanceLab.Benchmark.Classes;
+namespace PerformanceLab.Benchmarks.Classes;
 
 [MemoryDiagnoser]
 public class CalcBenchmark

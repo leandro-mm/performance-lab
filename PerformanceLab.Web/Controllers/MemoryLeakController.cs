@@ -2,8 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
-[Route("api/metrics")]
-public class MetricsController : ControllerBase
+[Route("api/memory-leak")]
+public class MemoryLeakController : ControllerBase
 {
     private static readonly List<byte[]> _memoryLeakStorage = new();
 

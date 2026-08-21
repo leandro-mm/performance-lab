@@ -1,6 +1,6 @@
 ﻿
 using BenchmarkDotNet.Running;
-using PerformanceLab.Benchmark.Classes;
+using PerformanceLab.Benchmarks.Classes;
 
 Console.WriteLine("Hello, World!");
 

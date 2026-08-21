@@ -15,4 +15,9 @@
     <ProjectReference Include="..\PerformanceLab.Core\PerformanceLab.Core.csproj" />
   </ItemGroup>
 
+<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
 </Project>

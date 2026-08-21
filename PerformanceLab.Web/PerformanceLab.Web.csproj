@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="CurrieTechnologies.Razor.SweetAlert2" Version="2.8.1" />
     <ProjectReference Include="..\PerformanceLab.Benchmarks\PerformanceLab.Benchmarks.csproj" />    
+      <ProjectReference Include="..\PerformanceLab.Core\PerformanceLab.Core.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.0" />
     <PackageReference Include="BenchmarkDotNet" Version="0.13.12" /> 
   </ItemGroup>

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using BenchmarkDotNet.Running;
-using PerformanceLab.Benchmark.Classes;
-using BenchmarkDotNet.Reports;  // Add this using statement
+using PerformanceLab.Benchmarks.Classes;
+using BenchmarkDotNet.Reports;
+using PerformanceLab.Web.Models;
+using BenchmarkDotNet.Configs;
 
 namespace PerformanceLab.Web.Controllers;
 
@@ -10,7 +12,10 @@ namespace PerformanceLab.Web.Controllers;
 public class BenchmarkController : ControllerBase
 {
     private readonly ILogger<BenchmarkController> _logger;
-
+    private static readonly SemaphoreSlim _semaphore = new(1, 1);
+    private static BenchmarkResultDto? _lastResult;
+    private static DateTime _lastRunTime;
+    private static bool _isRunning;
     public BenchmarkController(ILogger<BenchmarkController> logger)
         => _logger = logger;
 
@@ -20,22 +25,22 @@ public class BenchmarkController : ControllerBase
     {
         try
         {
-            // Executa benchmark em background
-            var summary = BenchmarkRunner.Run<StringProcessingBenchmark>();
-
-            var result = new
+            if (_isRunning)
             {
-                Reports = summary.Reports.Select(r => new
+                return Ok(new
                 {
-                    r.BenchmarkCase.DisplayInfo,
-                    r.ResultStatistics?.Mean,
-                    r.ResultStatistics?.StandardDeviation,
-                    AllocatedMemory = r.Metrics?.FirstOrDefault(m => m.Key == "Allocated Memory").Value?.Value
-                }),
-                Recommendations = GetRecommendations(summary)
-            };
+                    Status = "Executando",
+                    Message = "Um benchmark já está em execução. Aguarde."
+                });
+            }
 
-            return Ok(result);
+            _ = Task.Run(async () => await RunBenchmarkInBackground());
+
+            return Ok(new
+            {
+                Status = "Iniciado",
+                Message = "Benchmark iniciado em background."
+            });
 
         }
         catch (Exception ex)
@@ -44,7 +49,31 @@ public class BenchmarkController : ControllerBase
             return StatusCode(500, ex.Message);
         }
     }
+    [HttpGet("results")]
+    public IActionResult GetBenchmarkResults()
+    {
+        if (_lastResult == null)
+        {
+            return Ok(new { HasResults = false, Message = "Nenhum benchmark executado ainda." });
+        }
 
+        return Ok(new
+        {
+            HasResults = true,
+            LastRun = _lastRunTime,
+            Results = _lastResult
+        });
+    }
+    [HttpGet("status")]
+    public IActionResult GetStatus()
+    {
+        return Ok(new
+        {
+            IsRunning = _isRunning,
+            LastRun = _lastRunTime,
+            HasResults = _lastResult != null
+        });
+    }
     private object GetRecommendations(Summary summary)
     {
         // Lógica para sugerir melhorias baseado nos resultados
@@ -55,49 +84,61 @@ public class BenchmarkController : ControllerBase
         };
 
     }
-    [HttpPost("simulate-leak")]
-    public IActionResult SimulateMemoryLeak([FromQuery] int mb = 5)
+    private async Task RunBenchmarkInBackground()
     {
+        await _semaphore.WaitAsync();
         try
         {
-            // Allocate memory to simulate a leak
-            var memoryToAllocate = mb * 1024 * 1024; // Convert MB to bytes
-            var data = new byte[memoryToAllocate];
+            _isRunning = true;
+            _logger.LogInformation("🔄 Iniciando benchmark...");
 
-            // Fill with random data to prevent optimization
-            new Random().NextBytes(data);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            // Store in static list to prevent garbage collection
-            _memoryLeakStorage.Add(data);
+            // Configuração para executar in-process (dentro do mesmo processo)
+            var config = ManualConfig.Create(DefaultConfig.Instance)
+                .WithOptions(ConfigOptions.DisableOptimizationsValidator);
 
-            Console.WriteLine($"💣 Memory leak simulated: {mb}MB allocated. Total leaked: {_memoryLeakStorage.Sum(x => x.Length) / (1024 * 1024)}MB");
+            // Executar o benchmark
+            var summary = BenchmarkRunner.Run<StringProcessingBenchmark>(config);
 
-            return Ok(new
+            stopwatch.Stop();
+
+            // Processar resultados
+            _lastResult = new BenchmarkResultDto
             {
-                Message = $"Memory leak of {mb}MB simulated successfully",
-                AllocatedMB = mb,
-                TotalLeakedMB = _memoryLeakStorage.Sum(x => x.Length) / (1024 * 1024)
-            });
+                Reports = summary.Reports.Select(r => new BenchmarkReportDto
+                {
+                    DisplayInfo = r.BenchmarkCase.DisplayInfo,
+                    Mean = r.ResultStatistics?.Mean,
+                    StandardDeviation = r.ResultStatistics?.StandardDeviation,
+                    AllocatedMemory = r.Metrics?.FirstOrDefault(m => m.Key == "Allocated Memory").Value?.Value,
+                    Gen0 = r.GcStats.Gen0Collections,
+                    Gen1 = r.GcStats.Gen1Collections,
+                    Gen2 = r.GcStats.Gen2Collections
+                }).ToList(),
+                Recommendations = new BenchmarkRecommendationsDto
+                {
+                    Tip = "Considere usar StringBuilder para concatenações em loops",
+                    Gen0Collections = summary.Reports.FirstOrDefault()?.GcStats.Gen0Collections
+                },
+                DurationMs = stopwatch.ElapsedMilliseconds,
+                ExecutionTime = DateTime.Now,
+                TotalBenchmarks = summary.Reports.Count(),
+                SuccessfulBenchmarks = summary.Reports.Count(r => r.ResultStatistics != null)
+            };
+
+            _lastRunTime = DateTime.Now;
+            _logger.LogInformation($"✅ Benchmark concluído em {stopwatch.ElapsedMilliseconds}ms");
         }
         catch (Exception ex)
         {
-            return BadRequest(new { Error = ex.Message });
+            _logger.LogError(ex, "❌ Erro durante execução do benchmark: {Message}", ex.Message);
+            _logger.LogError(ex, "Stack trace: {StackTrace}", ex.StackTrace);
+        }
+        finally
+        {
+            _isRunning = false;
+            _semaphore.Release();
         }
     }
-
-    [HttpPost("clear-leak")]
-    public IActionResult ClearMemoryLeak()
-    {
-        var totalBefore = _memoryLeakStorage.Sum(x => x.Length) / (1024 * 1024);
-        _memoryLeakStorage.Clear();
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-
-        return Ok(new
-        {
-            Message = "Memory leak cleared",
-            FreedMB = totalBefore
-        });
-    }
-    private static readonly List<byte[]> _memoryLeakStorage = new();
 }
