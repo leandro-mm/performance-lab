@@ -1,3 +1,4 @@
+using CurrieTechnologies.Razor.SweetAlert2;
 using PerformanceLab.Web.Components;
 using PerformanceLab.Web.Hubs;
 var builder = WebApplication.CreateBuilder(args);
@@ -24,6 +25,8 @@ builder.Services.AddHttpClient("API", client =>
 });
 
 builder.Services.AddHttpClient();
+
+builder.Services.AddSweetAlert2();
 
 var app = builder.Build();
 
