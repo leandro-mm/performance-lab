@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Options;
 using PerformanceLab.Web.Hubs;
 
 public class MetricsCollector : BackgroundService

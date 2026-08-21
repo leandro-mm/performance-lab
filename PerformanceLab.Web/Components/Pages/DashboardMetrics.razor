@@ -1,7 +1,8 @@
-@page "/DashboardMetrics"
+@page "/Dashboard"
+@rendermode InteractiveServer
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
-@inject HttpClient Http
+@inject IHttpClientFactory HttpClientFactory
 @using PerformanceLab.Web.Hubs
 @using Microsoft.AspNetCore.SignalR.Client
 @using System.Collections.Generic
@@ -9,6 +10,13 @@
 
 
 <div class="container-fluid mt-4">
+    <div class="row mt-2">
+        <div class="col-12">
+            <div class="alert @(_isConnected ? "alert-success" : "alert-warning")">
+                Status: @_statusMessage
+            </div>
+        </div>
+    </div>
     <div class="row mt-4">
         <!-- Métricas em Cards -->
         <div class="col-md-3">
@@ -82,35 +90,180 @@
 
     private PerformanceMetrics? _currentMetrics;
     private List<PerformanceMetrics> _history = new();
+    private HubConnection? _hubConnection;
+    private bool _isConnected = false;
+    private string _statusMessage = "Aguardando conexão...";
+
     protected override async Task OnInitializedAsync()
     {
+        Console.WriteLine("🔵 OnInitializedAsync iniciado");
         // Setup SignalR
-        var connection = new HubConnectionBuilder()
+        _hubConnection = new HubConnectionBuilder()
                         .WithUrl(Navigation.ToAbsoluteUri("/metricsHub"))
+                        .WithAutomaticReconnect()
                         .Build();
 
-        connection.On<PerformanceMetrics>("ReceiveMetrics", metrics =>
+        // Status da conexão
+        _hubConnection.Closed += (error) =>
+        {
+            InvokeAsync(() =>
+            {
+                _isConnected = false;
+                _statusMessage = "❌ Desconectado";
+                StateHasChanged();
+                Console.WriteLine("🔴 SignalR desconectado");
+            });
+            return Task.CompletedTask;
+        };
+        _hubConnection.Reconnected += (connectionId) =>
+               {
+                   InvokeAsync(() =>
+                   {
+                       _isConnected = true;
+                       _statusMessage = $"✅ Reconectado (ID: {connectionId})";
+                       StateHasChanged();
+                       Console.WriteLine($"🔄 SignalR reconectado: {connectionId}");
+                   });
+                   return Task.CompletedTask;
+               };
+
+        _hubConnection.On<PerformanceMetrics>("ReceiveMetrics", metrics =>
+                        {
+                            // InvokeAsync muda para a thread do Dispatcher do Blazor
+                            InvokeAsync(() =>
+                            {
+                                _currentMetrics = metrics;
+
+                                // Adicionar ao histórico (limitar a 100 itens)
+                                _history.Add(metrics);
+                                if (_history.Count > 100)
+                                {
+                                    _history.RemoveAt(0);
+                                }
+
+                                StateHasChanged();
+                                Console.WriteLine($"📊 Métricas recebidas: CPU={metrics.CpuUsagePercent}%, Memória={metrics.MemoryUsedMB}MB");
+                            });
+                        });
+
+        _hubConnection.On<List<PerformanceMetrics>>("ReceiveHistory", history =>
                 {
-                    _currentMetrics = metrics;
-                    StateHasChanged();
+                    InvokeAsync(() =>
+                    {
+                        _history = history;
+                        StateHasChanged();
+                    });
                 });
 
-        connection.On<List<PerformanceMetrics>>("ReceiveHistory", history =>
-                {
-                    _history = history;
-                    StateHasChanged();
-                });
+        try
+        {
+            await _hubConnection.StartAsync();
+            _isConnected = true;
+            _statusMessage = "✅ Conectado";
+            StateHasChanged();
+            Console.WriteLine("✅ Conectado ao MetricsHub");
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = $"❌ Erro: {ex.Message}";
+            StateHasChanged();
+            Console.WriteLine($"❌ Erro ao conectar ao SignalR: {ex.Message}");
+        }
 
-        await connection.StartAsync();
     }
     private async Task RunBenchmark()
     {
-        // Chamar API que executa Benchmark.NET
-        await Http.PostAsync("/api/benchmark/run", null);
+        Console.WriteLine("🔵 RunBenchmark iniciado");
+
+        try
+        {
+            Console.WriteLine("📡 Enviando requisição para /api/benchmark/run");
+
+            var httpClient = HttpClientFactory.CreateClient("API");
+
+            // Chamar API que executa Benchmark.NET
+            var response = await httpClient.PostAsync("/api/benchmark/run", null);
+
+            Console.WriteLine($"📡 Resposta: {(int)response.StatusCode} - {response.StatusCode}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"✅ Benchmark executado com sucesso: {content}");
+
+                // Mostrar mensagem para o usuário
+                _statusMessage = "✅ Benchmark executado!";
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"❌ Benchmark falhou: {error}");
+                _statusMessage = $"❌ Erro: {response.StatusCode}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro no benchmark: {ex.Message}");
+            _statusMessage = $"❌ Erro: {ex.Message}";
+            StateHasChanged();
+        }
+
+        
     }
 
     private async Task SimulateMemoryLeak()
     {
-        await Http.PostAsync("/api/metrics/simulate-leak?mb=5", null);
+        Console.WriteLine("🔵 SimulateMemoryLeak iniciado");
+
+        try
+        {
+            Console.WriteLine("📡 Enviando requisição para /api/metrics/simulate-leak?mb=5");
+
+            var httpClient = HttpClientFactory.CreateClient("API");
+
+            var response = await httpClient.PostAsync("/api/metrics/simulate-leak?mb=5", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("✅ Memory leak simulado");
+                _statusMessage = "💣 Memory leak de 5MB simulado!";
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(error))
+                {
+                    // If no content, use status code and reason
+                    error = $"Status Code: {(int)response.StatusCode} - {response.ReasonPhrase}";
+                    Console.WriteLine($"⚠️ No error content returned: {error}");
+                }
+                else
+                {
+                    Console.WriteLine($"❌ Memory leak falhou: {error}");
+                }
+
+                _statusMessage = $"❌ Erro: {error}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao simular memory leak: {ex.Message}");
+            _statusMessage = $"❌ Erro: {ex.Message}";
+            StateHasChanged();
+        }
+
+    }
+
+    // iberar recursos quando o componente for descartado
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
     }
 }
