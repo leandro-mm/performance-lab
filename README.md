@@ -76,4 +76,8 @@ O GC divide a heap em 3 gerações para otimizar o desempenho, baseado no princ�
 ### Pro Tip
 - Para liberar recursos não gerenciados (arquivos, conexões de banco, handles de SO), implemente IDisposable e use using.
 - Evite criar muitos objetos de curta duração em loops críticos (isso sobrecarrega a Gen 0).
-- Use GC.Collect() com moderação – forçar uma coleta manual geralmente prejudica a performance e só é útil em cenários muito específicos (ex: após testes de benchmark).- 
+- Use GC.Collect() com moderação – forçar uma coleta manual geralmente prejudica a performance e só é útil em cenários muito específicos (ex: após testes de benchmark).-
+
+### Links
+[SweetAlert on Blazor](https://www.youtube.com/watch?v=8csLIusir6M)
+  
