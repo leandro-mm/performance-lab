@@ -1,3 +1,4 @@
+@using System.Globalization
 @using PerformanceLab.Web.Models
 @if (Result != null)
 {
@@ -7,11 +8,20 @@
             <button class="btn btn-sm btn-light" @onclick="CloseHandler">✕</button>
         </div>
         <div class="card-body">
-            <div class="alert alert-info">
-                <strong>Recomendação:</strong> @Result.Recommendations.Tip
-                <br />
-                <strong>GC Gen0 Collections:</strong> @Result.Recommendations.Gen0Collections
-            </div>
+            @if (Result.Recommendations != null)
+            {
+                <div class="alert alert-info">
+                    @Result.Recommendations.Tip
+                    <br />
+                    <strong>GC Gen0 Collections:</strong> @Result.Recommendations.Gen0Collections
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-warning">
+                    <strong>Recomendação:</strong> Não disponível
+                </div>
+            }
             <table class="table table-striped">
                 <thead>
                     <tr>
@@ -22,13 +32,13 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var report in Result.Reports)
+                    @foreach (BenchmarkReportDto report in Result.Reports)
                     {
                         <tr>
                             <td>@report.DisplayInfo</td>
-                            <td>@(report.Mean?.ToString("F4") ?? "-")</td>
-                            <td>@(report.StandardDeviation?.ToString("F4") ?? "-")</td>
-                            <td>@(report.AllocatedMemory?.ToString() ?? "-")</td>
+                            <td>@(report.Mean?.ToString("N2", new CultureInfo("pt-BR")) ?? "-")</td>
+                            <td>@(report.StandardDeviation?.ToString("N2", new CultureInfo("pt-BR")) ?? "-")</td>
+                            <td>@FormatMemory(report.AllocatedMemory)</td>
                         </tr>
                     }
                 </tbody>
@@ -44,5 +54,23 @@
     private async Task CloseHandler()
     {
         await OnClose.InvokeAsync();
+    }
+
+    private string FormatMemory(object? allocatedMemory)
+    {
+        if (allocatedMemory == null) return "-";
+
+        if (!double.TryParse(allocatedMemory.ToString(), out double bytes))
+            return allocatedMemory.ToString() ?? "-";
+
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        int order = 0;
+        while (bytes >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            bytes /= 1024;
+        }
+
+        return $"{bytes:N2} {sizes[order]}";
     }
 }

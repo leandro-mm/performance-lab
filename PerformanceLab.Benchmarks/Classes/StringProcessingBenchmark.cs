@@ -1,11 +1,13 @@
 using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Order;
 
 namespace PerformanceLab.Benchmarks.Classes;
 
-[MemoryDiagnoser] // Mede alocações de memória
+[MemoryDiagnoser]
 [Orderer(SummaryOrderPolicy.FastestToSlowest)]
 [RankColumn]
+[SimpleJob(RunStrategy.Monitoring, invocationCount: 1, warmupCount: 0)]//cada benchmark executa apenas uma vez
 public class StringProcessingBenchmark
 {
     private const int Iterations = 10000;
