@@ -36,8 +36,8 @@
                     {
                         <tr>
                             <td>@report.DisplayInfo</td>
-                            <td>@(report.Mean?.ToString("N2", new CultureInfo("pt-BR")) ?? "-")</td>
-                            <td>@(report.StandardDeviation?.ToString("N2", new CultureInfo("pt-BR")) ?? "-")</td>
+                            <td>@(report.Mean?.ToString("N0", new CultureInfo("pt-BR")) ?? "-")</td>
+                            <td>@(report.StandardDeviation?.ToString("N0", new CultureInfo("pt-BR")) ?? "-")</td>
                             <td>@FormatMemory(report.AllocatedMemory)</td>
                         </tr>
                     }

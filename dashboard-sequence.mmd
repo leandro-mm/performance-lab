@@ -1,0 +1,69 @@
+```mermaid
+sequenceDiagram
+    participant User
+    participant Dashboard as DashboardComponent
+    participant SignalR as MetricsHub
+    participant JS as JSRuntime/ChartJS
+    participant API as Backend API
+    participant Swal as SweetAlert
+
+    Note over Dashboard: Page load / initialization
+    User->>Dashboard: Navigate to /Dashboard
+    activate Dashboard
+    Dashboard->>SignalR: Build HubConnection -> StartAsync()
+    SignalR-->>Dashboard: Connected / Reconnected / Closed events
+
+    Note over Dashboard: AfterRender -> chart init
+    Dashboard->>JS: invoke "initializeMemoryChart" (dotNetRef)
+    JS-->>Dashboard: callback -> Dashboard.UpdateChartAsync()
+
+    Note over SignalR and Dashboard: real-time metrics
+    SignalR-->>Dashboard: ReceiveHistory(List<PerformanceMetrics>)
+    Dashboard->>JS: UpdateChartAsync (if chart initialized)
+    JS-->>Dashboard: chart updated
+
+    SignalR-->>Dashboard: ReceiveMetrics(PerformanceMetrics)
+    Dashboard->>Dashboard: update _currentMetrics, append _history, StateHasChanged()
+    Dashboard->>JS: UpdateChartAsync()
+    JS-->>Dashboard: chart updated
+
+    Note over User/API: Benchmarks flow
+    User->>Dashboard: Click RunBenchmark
+    Dashboard->>API: POST /api/benchmark/run
+    API-->>Dashboard: BenchmarkResponseDto (Status)
+    Dashboard->>Dashboard: set _isBenchmarkRunning = true
+    Dashboard->>Dashboard: start PollBenchmarkStatus()
+
+    loop Polling while running
+        Dashboard->>API: GET /api/benchmark/status
+        API-->>Dashboard: BenchmarkResponseDto (IsRunning)
+        alt finished (IsRunning == false)
+            Dashboard->>API: GET /api/benchmark/results
+            API-->>Dashboard: BenchmarkResultDto
+            Dashboard->>Swal: show completion/cancel alert
+            Dashboard-->>User: Render <BenchmarkResults> modal
+        end
+    end
+
+    Note over User/API: Cancel benchmark
+    User->>Dashboard: Click CancelBenchmark
+    Dashboard->>JS: confirm(...) via JSRuntime
+    alt confirmed
+        Dashboard->>API: POST /api/benchmark/cancel
+        API-->>Dashboard: cancel response
+        Dashboard->>Swal: notify cancellation
+    end
+
+    Note over User/API: Memory leak simulation
+    User->>Dashboard: Click SimulateMemoryLeak
+    Dashboard->>API: POST /api/memory-leak/simulate-leak?mb=5
+    API-->>Dashboard: success/failure
+    Dashboard->>Swal: show message
+    Dashboard->>Dashboard: _isCleanButtonDisabled = false
+
+    User->>Dashboard: Click CleanMemoryLeak
+    Dashboard->>API: POST /api/memory-leak/clear-leak
+    API-->>Dashboard: ack
+    Dashboard->>Swal: show "Memory Leak Stopped!"
+    Dashboard->>Dashboard: _isCleanButtonDisabled = true
+```
