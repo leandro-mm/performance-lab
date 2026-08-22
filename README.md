@@ -91,3 +91,106 @@ Verifique o uso de memória aumentando, a CPU oscilando e uma enorme diferença 
 ### Links
 [SweetAlert on Blazor](https://www.youtube.com/watch?v=8csLIusir6M)
   
+
+## **Executando o projeto**
+
+- **Pré-requisitos:**
+	- .NET SDK 8.0 ou superior (necessário para `TargetFramework` `net8.0`) — instale a partir de https://dotnet.microsoft.com/download
+	- Git (para clonar o repositório)
+	- Um navegador moderno (Chrome, Edge, Firefox)
+	- Editor/IDE opcional: Visual Studio 2022/2023, Visual Studio Code com a extensão C# (recomendado)
+	- Observação: não é necessário instalar Node.js para este projeto — o `Chart.js` é carregado via CDN.
+
+- **Restaurar dependências (nuget):**
+
+```bash
+dotnet restore
+```
+
+- **Compilar o projeto:**
+
+```bash
+dotnet build --configuration Debug
+```
+
+- **Executar apenas o projeto web `PerformanceLab.Web`:**
+
+```bash
+dotnet run --project PerformanceLab.Web/PerformanceLab.Web.csproj
+```
+
+Isso iniciará o servidor Kestrel com as URLs padrão (HTTP e HTTPS). Para definir URLs explícitas:
+
+```bash
+dotnet run --project PerformanceLab.Web/PerformanceLab.Web.csproj --urls "http://localhost:5000;https://localhost:5001"
+```
+
+- **Executar com hot-reload (opcional):**
+
+```bash
+dotnet watch run --project PerformanceLab.Web/PerformanceLab.Web.csproj
+```
+
+- **Executar pela IDE:**
+	- Abra `PerformanceLab.slnx` no Visual Studio ou abra a pasta no VS Code.
+	- Defina `PerformanceLab.Web` como projeto de inicialização e execute (F5 ou `Run`).
+
+- **Docker**
+
+Você pode empacotar e executar o `PerformanceLab.Web` em containers Docker. Abaixo há exemplos mínimos para `Dockerfile` e `docker-compose.yml`, além de comandos úteis.
+
+- Exemplo de `Dockerfile` (Multi-stage, baseado em .NET 8):
+
+```dockerfile
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copia csproj e restaura dependências
+COPY PerformanceLab.Web/PerformanceLab.Web.csproj PerformanceLab.Web/
+COPY PerformanceLab.Benchmarks/PerformanceLab.Benchmarks.csproj PerformanceLab.Benchmarks/
+COPY PerformanceLab.Core/PerformanceLab.Core.csproj PerformanceLab.Core/
+RUN dotnet restore PerformanceLab.Web/PerformanceLab.Web.csproj
+
+# Copia todo o código e publica
+COPY . .
+RUN dotnet publish PerformanceLab.Web/PerformanceLab.Web.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+COPY --from=build /app/publish .
+ENV ASPNETCORE_URLS="http://+:80"
+EXPOSE 80
+ENTRYPOINT ["dotnet", "PerformanceLab.Web.dll"]
+```
+
+- Comandos para construir e executar a imagem docker:
+
+```bash
+# Build
+docker build -t performancelab/web:latest .
+
+# Run (expondo porta 5000 localmente)
+docker run --rm -p 5000:80 --name performancelab performancelab/web:latest
+```
+
+- Exemplo de `docker-compose.yml` para desenvolvimento simples:
+
+```yaml
+version: '3.8'
+services:
+	web:
+		build: .
+		image: performancelab/web:latest
+		ports:
+			- "5000:80"
+		environment:
+			- ASPNETCORE_ENVIRONMENT=Development
+		volumes:
+			- ./:/src:cached
+```
+
+- Observações:
+	- Se quiser depurar via IDE dentro do container, monte volumes e configure portas e ferramentas de depuração na sua IDE.
+	- `Chart.js` é carregado via CDN por padrão; se estiver executando em ambiente fechado sem internet, substitua por uma cópia local em `wwwroot/js` e atualize `App.razor`.
+	- Ports: o container expõe `80`; mapeie para a porta desejada no host (ex.: `-p 5000:80`).
+
