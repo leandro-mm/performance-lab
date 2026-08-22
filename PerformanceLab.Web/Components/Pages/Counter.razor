@@ -1,19 +1,639 @@
-﻿@page "/counter"
+﻿@page "/Counter"
 @rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject IHttpClientFactory HttpClientFactory
+@inject SweetAlertService Swal
 
-<PageTitle>Counter</PageTitle>
+<button class="btn btn-primary" @onclick="ShowAlert">Trigger Alert</button>
+<div></div>
+<div class="container-fluid mt-4">
+    <div class="row mt-2">
+        <div class="col-12">
+            <div class="alert @(_isConnected ? "alert-success" : "alert-warning")">
+                Status: @_statusMessage
+            </div>
+        </div>
+    </div>
 
-<h1>Counter</h1>
+    <!-- Metric Cards with Gray Border -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="p-3 border border-secondary rounded" style="background-color: #f8f9fa;">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-header">GC Mode</div>
+                            <div class="card-body">
+                                <h6>@_currentMetrics?.GcMode</h6>
+                                <h6>Latency: @_currentMetrics?.GcLatencyMode</h6>
+                            </div>
+                        </div>
+                    </div>
 
-<p role="status">Current count: @currentCount</p>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-header">CPU</div>
+                            <div class="card-body">
+                                <h6>@_currentMetrics?.CpuUsagePercent %</h6>
+                                <h6>Workload: @_currentMetrics?.ThreadCount threads</h6>
+                            </div>
+                        </div>
+                    </div>
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-header">Memória RAM (Managed)</div>
+                            <div class="card-body">
+                                <h6>@_currentMetrics?.MemoryUsedMB/@_currentMetrics?.ManagedMemoryMB MB</h6>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-header">GC Collections</div>
+                            <div class="card-body">
+                                <h6>Gen0: @_currentMetrics?.Gen0Collections</h6>
+                                <h6>Gen1: @_currentMetrics?.Gen1Collections</h6>
+                                <h6>Gen2: @_currentMetrics?.Gen2Collections</h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico (Chart.js) e Botões lado a lado -->
+    <div class="row mt-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">Histórico de Memória (últimos 100 ticks)</div>
+                <div class="card-body">
+                    <canvas id="memoryChart" height="125"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <!-- Botões Empilhados -->
+            <div class="row g-2">
+                <div class="col-12">
+                    <div class="p-3 bg-light border border-secondary rounded"
+                         style="background-color: #f8f9fa !important; height: 100%;">
+                        <div class="text-center text-secondary fw-bold mb-2"
+                             style="font-size: 0.9rem; color: #6c757d !important;">
+                            Executar Benchmark (antes/depois)
+                        </div>
+                        <button id="runBenchmarkBtn" class="btn btn-outline-dark btn-md w-100 mb-1"
+                                @onclick="RunBenchmark" disabled="@_isBenchmarkRunning">
+                            OK
+                        </button>
+                        <button id="stopBenchmarkBtn" class="bbtn btn-outline-dark btn-md w-100 mb-1"
+                                @onclick="CancelBenchmark" disabled="@(!_isBenchmarkRunning)">
+                            ⏹ Parar
+                        </button>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="p-3 bg-light border border-secondary rounded"
+                         style="background-color: #f8f9fa !important; height: 100%;">
+                        <div class="text-center text-secondary fw-bold mb-2"
+                             style="font-size: 0.9rem; color: #6c757d !important;">
+                            Simular Memory Leak (5MB)
+                        </div>
+                        <button class="btn btn-outline-dark btn-md w-100 mb-1" @onclick="SimulateMemoryLeak"
+                                disabled="@(!_isCleanButtonDisabled)">
+                            OK
+                        </button>
+                        <button class="btn btn-outline-dark btn-md w-100 mb-1" @onclick="CleanMemoryLeak"
+                                disabled="@_isCleanButtonDisabled">
+                            Limpar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Benchmark Results Modal -->
+    @if (_benchmarkResult != null)
+    {
+        <BenchmarkResults Result="@_benchmarkResult" OnClose="() => { _benchmarkResult = null; }" />
+    }
+    @if (_isBenchmarkRunning)
+    {
+        <div class="container-fluid mt-4">
+            <div class="row mt-2">
+                <div class="col-12">
+                    <div class="alert alert-info">
+                        Benchmark em execução. Aguardando resultados...
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
 
 @code {
-    private int currentCount = 0;
 
-    private void IncrementCount()
+    private PerformanceMetrics? _currentMetrics;
+    private List<PerformanceMetrics> _history = new();
+    private HubConnection? _hubConnection;
+    private bool _isConnected = false;
+    private string _statusMessage = "Aguardando conexão...";
+    HttpClient? httpClient = null;
+    private bool _isCleanButtonDisabled = true; // Add this line
+    private bool _chartInitialized = false;
+    private DotNetObjectReference<Counter>? _objRef;
+    private BenchmarkResultDto? _benchmarkResult;
+    private bool _isBenchmarkRunning = false;
+
+    protected override async Task OnInitializedAsync()
     {
-        currentCount++;
+        Console.WriteLine("🔵 OnInitializedAsync iniciado");
+        // Setup SignalR
+        _hubConnection = new HubConnectionBuilder()
+                        .WithUrl(Navigation.ToAbsoluteUri("/metricsHub"))
+                        .WithAutomaticReconnect()
+                        .Build();
+
+        // Status da conexão
+        _hubConnection.Closed += (error) =>
+        {
+            InvokeAsync(() =>
+            {
+                _isConnected = false;
+                _statusMessage = "❌ Desconectado do MetricsHub";
+                StateHasChanged();
+                Console.WriteLine("🔴 desconectado do MetricsHub");
+            });
+            return Task.CompletedTask;
+        };
+        _hubConnection.Reconnected += (connectionId) =>
+               {
+                   InvokeAsync(() =>
+                   {
+                       _isConnected = true;
+                       _statusMessage = $"Reconectado ao MetricsHub (ID: {connectionId})";
+                       StateHasChanged();
+                       Console.WriteLine($"🔄 reconectado ao MetricsHub: {connectionId}");
+                   });
+                   return Task.CompletedTask;
+               };
+
+        _hubConnection.On<PerformanceMetrics>("ReceiveMetrics", metrics =>
+                        {
+                            // InvokeAsync muda para a thread do Dispatcher do Blazor
+                            InvokeAsync(() =>
+                            {
+                                _currentMetrics = metrics;
+
+                                // Adicionar ao histórico (limitar a 100 itens)
+                                _history.Add(metrics);
+                                if (_history.Count > 100)
+                                {
+                                    _history.RemoveAt(0);
+                                }
+                                _ = UpdateChartAsync();
+                                StateHasChanged();
+                            });
+                        });
+
+        _hubConnection.On<List<PerformanceMetrics>>("ReceiveHistory", history =>
+                {
+                    InvokeAsync(() =>
+                    {
+                        _history = history;
+                        _ = UpdateChartAsync();
+                        StateHasChanged();
+                    });
+                });
+
+        try
+        {
+            await _hubConnection.StartAsync();
+            _isConnected = true;
+            _statusMessage = "Conectado ao MetricsHub";
+            StateHasChanged();
+            Console.WriteLine("SignalR Conectado ao MetricsHub");
+        }
+        catch (Exception ex)
+        {
+            _statusMessage = $"❌ Erro: {ex.Message}";
+            StateHasChanged();
+        }
+
+    }
+    [JSInvokable]
+    private async Task UpdateChartAsync()
+    {
+        if (!_chartInitialized || _history.Count == 0) return;
+
+        try
+        {
+            var labels = _history.Select((_, i) => i.ToString()).ToArray();
+            var memoryData = _history.Select(m => (double)m.MemoryUsedMB).ToArray();
+            var cpuData = _history.Select(m => (double)m.CpuUsagePercent).ToArray();
+
+            await JSRuntime.InvokeVoidAsync("updateMemoryChart", labels, memoryData, cpuData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error updating chart: {ex.Message}");
+            _ = Swal.FireAsync(new SweetAlertOptions
+            {
+                Title = "Erro",
+                Text = ex.Message,
+                Icon = SweetAlertIcon.Info,
+                ShowCancelButton = false,
+                ConfirmButtonText = "Ok"
+            });
+        }
+    }
+
+    private async Task RunBenchmark()
+    {
+        try
+        {
+            httpClient = HttpClientFactory.CreateClient("API");
+
+            // Chamar API que executa Benchmark.NET
+            var response = await httpClient.PostAsync("/api/benchmark/run", null);
+            var result = await response.Content.ReadFromJsonAsync<BenchmarkResponseDto>();
+
+            if (response.IsSuccessStatusCode)
+            {
+                _isBenchmarkRunning = true;
+                StateHasChanged();
+
+                // Iniciar polling para verificar status
+                _ = Task.Run(async () => await PollBenchmarkStatus());
+
+                if (result?.Status == "Executando")
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await Swal.FireAsync(new SweetAlertOptions
+                        {
+                            Title = "Benchmark em Execução",
+                            Text = "O benchmark está rodando em background. Aguarde ou cancele.",
+                            Icon = SweetAlertIcon.Info,
+                            Timer = 3000
+                        });
+                    });
+
+                }
+                else if (result?.Status == "Iniciado")
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await Swal.FireAsync(new SweetAlertOptions
+                        {
+                            Title = "Benchmark foi Iniciado",
+                            Text = "O benchmark está rodando em background",
+                            Icon = SweetAlertIcon.Info,
+                            Timer = 3000
+                        });
+                    });
+
+                }
+            }
+            else
+            {
+                _isBenchmarkRunning = false;
+                StateHasChanged();
+                await InvokeAsync(async () =>
+                            {
+                                await Swal.FireAsync(new SweetAlertOptions
+                                {
+                                    Title = "Erro",
+                                    Text = result?.Message,
+                                    Icon = SweetAlertIcon.Error,
+                                    Timer = 3000
+                                });
+                            });
+
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro no benchmark: {ex.Message}");
+
+            await CancelBenchmark();
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task SimulateMemoryLeak()
+    {
+        Console.WriteLine("🔵 SimulateMemoryLeak iniciado");
+
+        try
+        {
+            Console.WriteLine("📡 Enviando requisição para /api/memory-leak/simulate-leak?mb=5");
+
+            httpClient = HttpClientFactory.CreateClient("API");
+            var response = await httpClient.PostAsync("/api/memory-leak/simulate-leak?mb=5", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("✅ Memory leak simulado");
+
+                var message = await response.Content.ReadAsStringAsync();
+
+                await InvokeAsync(async () =>
+            {
+                await Swal.FireAsync(new SweetAlertOptions
+                {
+                    Title = "",
+                    Text = message,
+                    Icon = SweetAlertIcon.Info,
+                    ShowCancelButton = false,
+                    ConfirmButtonText = "Ok"
+                });
+            });
+
+                _isCleanButtonDisabled = false;
+                StateHasChanged();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(error))
+                {
+                    // If no content, use status code and reason
+                    error = $"Status Code: {(int)response.StatusCode} - {response.ReasonPhrase}";
+                    Console.WriteLine($"⚠️ No error content returned: {error}");
+
+
+                }
+                else
+                {
+                    Console.WriteLine($"❌ Memory leak falhou: {error}");
+                }
+                await InvokeAsync(async () =>
+                                                {
+                                                    await Swal.FireAsync(new SweetAlertOptions
+                                                    {
+                                                        Title = "Erro",
+                                                        Text = error,
+                                                        Icon = SweetAlertIcon.Info,
+                                                        ShowCancelButton = false,
+                                                        ConfirmButtonText = "Ok"
+                                                    });
+                                                });
+
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao simular memory leak: {ex.Message}");
+
+            await InvokeAsync(async () =>
+            {
+                await Swal.FireAsync(new SweetAlertOptions
+                {
+                    Title = "Erro",
+                    Text = ex.Message,
+                    Icon = SweetAlertIcon.Info,
+                    ShowCancelButton = false,
+                    ConfirmButtonText = "Ok"
+                });
+            });
+            StateHasChanged();
+        }
+
+    }
+
+    // iberar recursos quando o componente for descartado
+    public async ValueTask DisposeAsync()
+    {
+
+        if (_hubConnection is not null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+
+    private async Task CleanMemoryLeak()
+    {
+        httpClient = HttpClientFactory.CreateClient("API");
+        await httpClient.PostAsync("/api/memory-leak/clear-leak", null);
+        await InvokeAsync(async () =>
+                    {
+                        await Swal.FireAsync(new SweetAlertOptions
+                        {
+                            Title = "",
+                            Text = "Memory Leak Stopped!",
+                            Icon = SweetAlertIcon.Info,
+                            ShowCancelButton = false,
+                            ConfirmButtonText = "Ok"
+                        });
+                    });
+
+        _isCleanButtonDisabled = true;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeChartAsync();
+        }
+    }
+    private async Task InitializeChartAsync()
+    {
+        try
+        {
+            _objRef = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("initializeMemoryChart", _objRef);
+            _chartInitialized = true;
+
+            // Se já houver dados no histórico, atualiza o gráfico
+            if (_history.Count > 0)
+            {
+                await UpdateChartAsync();
+            }
+
+            Console.WriteLine("✅ Gráfico inicializado com sucesso");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao inicializar gráfico: {ex.Message}");
+        }
+    }
+
+    private async Task CancelBenchmark()
+    {
+        var confirm = await JSRuntime.InvokeAsync<bool>("confirm", "Tem certeza que deseja cancelar o benchmark em execução?");
+
+        if (!confirm)
+            return;
+
+        try
+        {
+            httpClient = HttpClientFactory.CreateClient("API");
+            var response = await httpClient.PostAsync("/api/benchmark/cancel", null);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<BenchmarkResponseDto>();
+                await InvokeAsync(async () =>
+                {
+                    await Swal.FireAsync(new SweetAlertOptions
+                    {
+                        Title = "Cancelamento Solicitado",
+                        Text = result?.Status,
+                        Icon = SweetAlertIcon.Warning,
+                        Timer = 3000
+                    });
+                });
+
+
+                // Aguardar confirmação de parada
+                await Task.Delay(2000);
+                await CheckBenchmarkStatus();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao cancelar benchmark: {ex.Message}");
+            await InvokeAsync(async () =>
+                            {
+                                await Swal.FireAsync(new SweetAlertOptions
+                                {
+                                    Title = "Erro",
+                                    Text = ex.Message,
+                                    Icon = SweetAlertIcon.Error,
+                                    Timer = 3000
+                                });
+                            });
+
+        }
+    }
+    private async Task CheckBenchmarkStatus()
+    {
+        try
+        {
+            httpClient = HttpClientFactory.CreateClient("API");
+            var response = await httpClient.GetFromJsonAsync<BenchmarkResponseDto>("/api/benchmark/status");
+
+            var wasRunning = _isBenchmarkRunning;
+
+            await InvokeAsync(() =>
+            {
+                _isBenchmarkRunning = response?.IsRunning ?? false;
+                StateHasChanged();
+            });
+
+
+            Console.WriteLine($"Status check: wasRunning={wasRunning}, nowRunning={_isBenchmarkRunning}");
+
+            if (wasRunning != _isBenchmarkRunning)
+            {
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro ao verificar status: {ex.Message}");
+        }
+    }
+
+    private async Task PollBenchmarkStatus()
+    {
+        try
+        {
+            while (_isBenchmarkRunning)
+            {
+                await Task.Delay(2000);
+
+                // this updates _isBenchmarkRunning
+                await CheckBenchmarkStatus();
+
+                // ONLY load results when benchmark is no longer running
+                if (!_isBenchmarkRunning)
+                {
+                    await InvokeAsync(async () =>
+                     {
+                         await LoadBenchmarkResults();
+                     });
+
+                    break; // Exit the loop
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Erro no polling: {ex.Message}");
+        }
+    }
+
+    private async Task LoadBenchmarkResults()
+    {
+        try
+        {
+            httpClient = HttpClientFactory.CreateClient("API");
+            var result = await httpClient.GetFromJsonAsync<BenchmarkResultDto>("/api/benchmark/results");
+
+            if (result != null)
+            {
+                Console.WriteLine($"Result loaded: IsCancelled={result.IsCancelled}, HasResults={result.TotalBenchmarks > 0}");
+
+                // Only show results if they're valid (not cancelled and has data)
+                if (result.TotalBenchmarks > 0 || result.IsCancelled == true)
+                {
+                    _benchmarkResult = result;
+                    StateHasChanged();
+                    await InvokeAsync(async () =>
+                                               {
+                                                   await Swal.FireAsync(new SweetAlertOptions
+                                                   {
+                                                       Title = result.IsCancelled ? "Benchmark Cancelado" : "Benchmark Concluído",
+                                                       Text = result.IsCancelled ?
+                                                                            "O benchmark foi cancelado pelo usuário." :
+                                                                            $"Benchmark concluído com {result.TotalBenchmarks} testes.",
+                                                       Icon = result.IsCancelled ? SweetAlertIcon.Warning : SweetAlertIcon.Success,
+                                                       Timer = 3000
+                                                   });
+                                               });
+
+                }
+            }
+            else
+            {
+                Console.WriteLine("Result was null - benchmark might have failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(async () =>
+                                               {
+                                                   await Swal.FireAsync(new SweetAlertOptions
+                                                   {
+                                                       Title = "Erro",
+                                                       Text = "Erro",
+                                                       Icon = SweetAlertIcon.Error,
+                                                       Timer = 3000
+                                                   });
+                                               });
+
+
+            Console.WriteLine($"❌ Erro ao carregar resultados: {ex.Message}");
+        }
+    }
+
+    private async Task ShowAlert()
+    {
+        await Swal.FireAsync(new SweetAlertOptions
+        {
+            Title = "Success!",
+            Text = "SweetAlert2 is working perfectly on Blazor Server.",
+            Icon = SweetAlertIcon.Success
+        });
     }
 }

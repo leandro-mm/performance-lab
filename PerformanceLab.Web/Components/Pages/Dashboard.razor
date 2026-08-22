@@ -6,6 +6,7 @@
 @inject SweetAlertService Swal
 
 
+<div></div>
 <div class="container-fluid mt-4">
     <div class="row mt-2">
         <div class="col-12">
@@ -144,7 +145,7 @@
     HttpClient? httpClient = null;
     private bool _isCleanButtonDisabled = true; // Add this line
     private bool _chartInitialized = false;
-    private DotNetObjectReference<DashboardMetrics>? _objRef;
+    private DotNetObjectReference<Dashboard>? _objRef;
     private BenchmarkResultDto? _benchmarkResult;
     private bool _isBenchmarkRunning = false;
 
@@ -366,7 +367,7 @@
                     error = $"Status Code: {(int)response.StatusCode} - {response.ReasonPhrase}";
                     Console.WriteLine($"⚠️ No error content returned: {error}");
 
-                    
+
                 }
                 else
                 {
@@ -492,7 +493,7 @@
                     });
                 });
 
-                
+
                 // Aguardar confirmação de parada
                 await Task.Delay(2000);
                 await CheckBenchmarkStatus();
@@ -529,7 +530,7 @@
                 StateHasChanged();
             });
 
-            
+
             Console.WriteLine($"Status check: wasRunning={wasRunning}, nowRunning={_isBenchmarkRunning}");
 
             if (wasRunning != _isBenchmarkRunning)
@@ -621,8 +622,10 @@
                                                    });
                                                });
 
-            
+
             Console.WriteLine($"❌ Erro ao carregar resultados: {ex.Message}");
         }
     }
+
+    
 }
