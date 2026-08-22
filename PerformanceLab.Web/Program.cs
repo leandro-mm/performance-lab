@@ -9,6 +9,7 @@ var gcOptions = builder.Configuration.ConfigureGC(builder.Services);
 var logger = LoggerFactory.Create(cfg => cfg.AddConsole()).CreateLogger("Program");
 GCConfiguration.LogGCConfiguration(logger, gcOptions);
 
+builder.Services.AddScoped<IDashboardService, DashboardService>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

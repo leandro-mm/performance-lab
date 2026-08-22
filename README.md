@@ -77,3 +77,51 @@ O GC divide a heap em 3 gerações para otimizar o desempenho, baseado no princ�
 - Para liberar recursos não gerenciados (arquivos, conexões de banco, handles de SO), implemente IDisposable e use using.
 - Evite criar muitos objetos de curta duração em loops críticos (isso sobrecarrega a Gen 0).
 - Use GC.Collect() com moderação – forçar uma coleta manual geralmente prejudica a performance e só é útil em cenários muito específicos (ex: após testes de benchmark).- 
+
+## **Executando o projeto**
+
+- **Pré-requisitos:**
+	- .NET SDK 8.0 ou superior (necessário para `TargetFramework` `net8.0`) — instale a partir de https://dotnet.microsoft.com/download
+	- Git (para clonar o repositório)
+	- Um navegador moderno (Chrome, Edge, Firefox)
+	- Editor/IDE opcional: Visual Studio 2022/2023, Visual Studio Code com a extensão C# (recomendado)
+	- Observação: não é necessário instalar Node.js para este projeto — o `Chart.js` é carregado via CDN.
+
+- **Restaurar dependências (nuget):**
+
+```bash
+dotnet restore
+```
+
+- **Compilar o projeto:**
+
+```bash
+dotnet build --configuration Debug
+```
+
+- **Executar apenas o projeto web `PerformanceLab.Web`:**
+
+```bash
+dotnet run --project PerformanceLab.Web/PerformanceLab.Web.csproj
+```
+
+Isso iniciará o servidor Kestrel com as URLs padrão (HTTP e HTTPS). Para definir URLs explícitas:
+
+```bash
+dotnet run --project PerformanceLab.Web/PerformanceLab.Web.csproj --urls "http://localhost:5000;https://localhost:5001"
+```
+
+- **Executar com hot-reload (opcional):**
+
+```bash
+dotnet watch run --project PerformanceLab.Web/PerformanceLab.Web.csproj
+```
+
+- **Executar pela IDE:**
+	- Abra `PerformanceLab.slnx` no Visual Studio ou abra a pasta no VS Code.
+	- Defina `PerformanceLab.Web` como projeto de inicialização e execute (F5 ou `Run`).
+
+- **Notas adicionais:**
+	- O projeto usa SignalR para métricas em tempo real e carrega `Chart.js` via CDN; assegure acesso à internet para o CDN ou substitua por uma cópia local em `wwwroot` se necessário.
+	- Se ocorrerem erros de restauração, verifique sua versão do .NET SDK com `dotnet --info` e atualize conforme necessário.
+
