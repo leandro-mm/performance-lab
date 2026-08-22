@@ -8,4 +8,7 @@ public class BenchmarkResultDto
     public DateTime ExecutionTime { get; set; }
     public int TotalBenchmarks { get; set; }
     public int SuccessfulBenchmarks { get; set; }
+    public bool IsCancelled { get; set; }
+    public bool IsRunning { get; set; }
+    public bool HasResults { get; set; }
 }
