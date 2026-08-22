@@ -31,12 +31,6 @@ Projeto idealizado para analisar e comparar o impacto de diferentes abordagens d
 ## Arquitetura
 <img width="626" height="158" alt="image" src="https://github.com/user-attachments/assets/434ed5a5-ea9e-4b7a-911a-efec0ac1d717" />
 
----  
-## Benefícios Demonstrados
-- Economia de Memória: Até 90% menos alocações com StringBuilder;
-- Redução de GC: Menos coleções = melhor performance;
-- Boxing Elimination: Operações matemáticas 3x mais rápidas;
-- Visualização em Tempo Real: Identificação imediata de problemas
 
 ---  
 ## O que é o Garbage Collector (GC)?
@@ -71,6 +65,18 @@ O GC divide a heap em 3 gerações para otimizar o desempenho, baseado no princ�
 | Uso de Recursos   |  Menos agressivo   |  Mais agressivo e intensivo   |
 |  Padrão .NET |  Padrão para aplicações autônomas (exe)   |  Padrão para aplicações ASP.NET Core   |
 
+---  
+| Método Antes | Método Depois | 
+| -------- | -------- | 
+| <img width="622" height="309" alt="image" src="https://github.com/user-attachments/assets/4b1370d1-6aa3-4a46-bb8f-ae5952f176da" />    | <img width="617" height="348" alt="image" src="https://github.com/user-attachments/assets/64ff9af5-b275-4997-a307-fb66343b2d07" />   | 
+| Tempo de execução (ms)  2.777.949.893 | Tempo de execução (ms)  2.832.136  | 
+| Desvio padrão 50.821.082  |Desvio padrão  92.393| 
+| Memória  6,34 GB|Memória 3,75 MB| 
+
+## Benefícios Demonstrados
+- Economia de Memória: ≈99,94% menos alocações com StringBuilder;
+- Redução de GC: Menos coleções = melhor performance;
+- Visualização em Tempo Real: Identificação imediata de problemas
 ---  
 
 ### Pro Tip
