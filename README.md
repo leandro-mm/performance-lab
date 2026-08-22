@@ -77,6 +77,10 @@ O GC divide a heap em 3 gerações para otimizar o desempenho, baseado no princ�
 - Economia de Memória: ≈99,94% menos alocações com StringBuilder;
 - Redução de GC: Menos coleções = melhor performance;
 - Visualização em Tempo Real: Identificação imediata de problemas
+
+## [Vídeo Demonstrativo](https://youtu.be/GuOLIaj-vM8)
+Verifique o uso de memória aumentando, a CPU oscilando e uma enorme diferença nos números de Gen0/Gen1/Gen2.
+
 ---  
 
 ### Pro Tip
